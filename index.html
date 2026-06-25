@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IIITM Leave Portal</title>
+    <link rel="stylesheet" href="style.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet" />
+</head>
+<!-- EmailJS Library -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js">
+</script>
+<script>
+   (function() {
+      emailjs.init({
+        publicKey: "LVSbb6UwpBu6P5EI3",
+      });
+   })();
+</script>
+<body>
+
+    <!-- ===== LANDING PAGE ===== -->
+    <div id="landingPage" class="landing-page">
+        <div class="landing-container">
+            <div class="landing-box">
+                <h1>🏛️ IIITM Leave Portal</h1>
+                <p class="institute-name">Indian Institute of Information Technology, Senapati, Manipur</p>
+                <p class="landing-subtitle">Welcome to the Leave Management System</p>
+                
+                <div class="landing-buttons">
+                    <a href="#" class="btn btn-primary btn-full" id="gotoAdminLogin">🔐 Admin Login</a>
+                    <a href="#" class="btn btn-secondary btn-full" id="gotoEmployeeLogin">👤 Employee Login</a>
+                    <a href="#" class="btn btn-outline btn-full" id="gotoRegister">📝 New User? Register</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ADMIN LOGIN PAGE ===== -->
+    <div id="adminLoginPage" style="display: none;" class="login-page">
+        <div class="login-container">
+            <div class="login-box">
+                <div class="login-header">
+                    <h1>🔐 Admin Login</h1>
+                    <p class="login-subtitle">Sign in to manage leave requests and users</p>
+                </div>
+                
+                <form id="adminLoginForm" class="login-form">
+                    <div class="form-group">
+                        <label for="adminEmail">Email</label>
+                        <input type="email" id="adminEmail" placeholder="Enter admin email" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="adminPassword">Password</label>
+                        <input type="password" id="adminPassword" placeholder="Enter admin password" required />
+                    </div>
+                    <div class="captcha-info">
+                        <span class="captcha-badge">🔒 CAPTCHA</span>
+                        <span class="captcha-status" id="adminCaptchaStatus">✓ Security check active</span>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">Sign In as Admin</button>
+                    <p id="adminLoginError" class="login-error"></p>
+                </form>
+                
+                <p class="login-hint">
+                    <a href="#" id="adminBackToLanding">← Back to Home</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== EMPLOYEE LOGIN PAGE ===== -->
+    <div id="employeeLoginPage" style="display: none;" class="login-page">
+        <div class="login-container">
+            <div class="login-box">
+                <div class="login-header">
+                    <h1>👤 Employee Login</h1>
+                    <p class="login-subtitle">Sign in to apply for leave and check your balance</p>
+                </div>
+                
+                <form id="employeeLoginForm" class="login-form">
+                    <div class="form-group">
+                        <label for="employeeEmail">Email</label>
+                        <input type="email" id="employeeEmail" placeholder="Enter your email" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="employeePassword">Password</label>
+                        <input type="password" id="employeePassword" placeholder="Enter your password" required />
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="empRememberMe" />
+                        <label for="empRememberMe">Remember Me</label>
+                    </div>
+                    <div class="captcha-info">
+                        <span class="captcha-badge">🔒 CAPTCHA</span>
+                        <span class="captcha-status" id="employeeCaptchaStatus">✓ Security check active</span>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+                    <p id="employeeLoginError" class="login-error"></p>
+                </form>
+                
+                <p class="login-hint">
+                    <a href="#" id="employeeBackToLanding">← Back to Home</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== REGISTRATION PAGE ===== -->
+    <div id="registerPage" style="display: none;" class="login-page">
+        <div class="login-container">
+            <div class="login-box">
+                <div class="login-header">
+                    <h1>📝 Create Account</h1>
+                    <p class="login-subtitle">Register as a new employee</p>
+                </div>
+                
+                <form id="registerForm" class="login-form">
+                    <div class="form-group">
+                        <label for="regName">Full Name</label>
+                        <input type="text" id="regName" placeholder="Enter your full name" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="regEmail">Email</label>
+                        <input type="email" id="regEmail" placeholder="Enter your email" required />
+                        <small class="form-hint">Allowed domains: gmail.com, iiitmanipur.ac.in</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Password</label>
+                        <input type="password" id="regPassword" placeholder="Create a password (min 6 chars)" required />
+                    </div>
+                    <button type="submit" class="btn btn-secondary btn-full">Create Account</button>
+                    <p id="registerError" class="login-error"></p>
+                </form>
+
+                <!-- OTP Verification Section -->
+                <div id="otpSection" style="display: none;" class="otp-section">
+                    <p style="text-align: center; margin-bottom: 16px;">
+                        We sent a verification code to <strong id="otpEmailDisplay"></strong>
+                    </p>
+                    <div class="form-group">
+                        <label for="otpInput">Enter OTP</label>
+                        <input type="text" id="otpInput" placeholder="Enter 6-digit OTP" maxlength="6" />
+                    </div>
+                    <div style="display: flex; gap: 12px;">
+                        <button type="button" id="verifyOtpBtn" class="btn btn-primary" style="flex: 1;">Verify OTP</button>
+                        <button type="button" id="resendOtpBtn" class="btn btn-secondary" style="flex: 1;">Resend</button>
+                    </div>
+                    <p id="otpError" class="login-error"></p>
+                </div>
+                
+                <p class="login-hint">
+                    <a href="#" id="registerBackToLanding">← Back to Home</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ADMIN DASHBOARD ===== -->
+    <div id="adminDashboard" style="display: none;">
+        <nav>
+            <div class="container nav-container">
+                <a href="#" class="logo">
+                    <span style="color: #4A90D9;">🏛️ IIITM</span>
+                    <span style="color: #50C878;">Admin</span>
+                </a>
+                <ul class="nav-links" id="adminNavLinks">
+                    <li><a href="#" id="adminNavDashboard" class="active">Dashboard</a></li>
+                    <li><a href="#" id="adminNavUsers">Users</a></li>
+                    <li><a href="#" id="adminNavLogout">Logout</a></li>
+                </ul>
+                <button class="hamburger" id="adminHamburger" aria-label="Toggle menu">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="dashboard-content">
+            <!-- Admin Dashboard View -->
+            <section id="adminViewDashboard" class="view-section">
+                <div class="container">
+                    <div class="dashboard-header">
+                        <div>
+                            <h2>🔧 Admin Panel</h2>
+                            <p class="user-role">Manage leave requests and user accounts</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-stats">
+                        <div class="admin-stat-card">
+                            <span>Total Requests</span>
+                            <strong id="adminTotalRequests">0</strong>
+                        </div>
+                        <div class="admin-stat-card">
+                            <span>Pending</span>
+                            <strong id="adminPendingRequests" style="color: #FF6B6B;">0</strong>
+                        </div>
+                        <div class="admin-stat-card">
+                            <span>Approved</span>
+                            <strong id="adminApprovedRequests" style="color: #50C878;">0</strong>
+                        </div>
+                        <div class="admin-stat-card">
+                            <span>Rejected</span>
+                            <strong id="adminRejectedRequests" style="color: #FF6B6B;">0</strong>
+                        </div>
+                    </div>
+
+                    <h3>📋 Leave Requests</h3>
+                    <div class="table-container">
+                        <table class="leave-table admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Employee</th>
+                                    <th>Type</th>
+                                    <th>Days</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminTableBody">
+                                <tr>
+                                    <td colspan="8" class="empty-message">No leave requests to review</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Admin Users View -->
+            <section id="adminViewUsers" class="view-section" style="display: none;">
+                <div class="container">
+                    <h2>👥 Registered Users</h2>
+                    <p class="section-subtitle">View all registered users and their details</p>
+
+                    <div class="table-container">
+                        <table class="leave-table admin-table user-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Password</th>
+                                    <th>Verified</th>
+                                    <th>Used Leave</th>
+                                    <th>Remaining</th>
+                                    <th>Pending</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userTableBody">
+                                <tr>
+                                    <td colspan="8" class="empty-message">No users registered</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- ===== EMPLOYEE DASHBOARD ===== -->
+    <div id="employeeDashboard" style="display: none;">
+        <nav>
+            <div class="container nav-container">
+                <a href="#" class="logo">
+                    <span style="color: #4A90D9;">🏛️ IIITM</span>
+                    <span style="color: #50C878;">Leave Portal</span>
+                </a>
+                <ul class="nav-links" id="employeeNavLinks">
+                    <li><a href="#" id="empNavDashboard" class="active">Dashboard</a></li>
+                    <li><a href="#" id="empNavApplyLeave">Apply Leave</a></li>
+                    <li><a href="#" id="empNavHistory">History</a></li>
+                    <li><a href="#" id="empNavLogout">Logout</a></li>
+                </ul>
+                <button class="hamburger" id="employeeHamburger" aria-label="Toggle menu">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="dashboard-content">
+
+            <!-- Employee Dashboard View -->
+            <section id="empViewDashboard" class="view-section">
+                <div class="container">
+                    <div class="dashboard-header">
+                        <div>
+                            <h2>👋 Welcome, <span id="empUserName">User</span></h2>
+                            <p class="user-role">Employee</p>
+                        </div>
+                        <div class="header-actions">
+                            <button class="btn btn-primary" id="empQuickApplyBtn">➕ Apply Leave</button>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">📊</div>
+                            <div class="stat-info">
+                                <h3>Total Leave Allowed</h3>
+                                <p class="stat-number" id="empTotalLeave">30</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">✅</div>
+                            <div class="stat-info">
+                                <h3>Used Leave</h3>
+                                <p class="stat-number" id="empUsedLeave">0</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">📅</div>
+                            <div class="stat-info">
+                                <h3>Remaining Leave</h3>
+                                <p class="stat-number highlight-blue" id="empRemainingLeave">30</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⏳</div>
+                            <div class="stat-info">
+                                <h3>Pending Requests</h3>
+                                <p class="stat-number highlight-orange" id="empPendingCount">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="recent-section">
+                        <h3>📝 Recent Applications</h3>
+                        <div class="table-container">
+                            <table class="leave-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Days</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="empRecentTableBody">
+                                    <tr>
+                                        <td colspan="4" class="empty-message">No leave applications yet</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Employee Apply Leave View -->
+            <section id="empViewApplyLeave" class="view-section" style="display: none;">
+                <div class="container">
+                    <h2>📝 Apply for Leave</h2>
+                    <p class="section-subtitle">Fill in the details below to submit your leave request</p>
+
+                    <div class="leave-balance-banner">
+                        <div class="balance-item">
+                            <span>Total Leave</span>
+                            <strong id="empApplyTotalLeave">30</strong>
+                        </div>
+                        <div class="balance-item">
+                            <span>Used Leave</span>
+                            <strong id="empApplyUsedLeave">0</strong>
+                        </div>
+                        <div class="balance-item highlight">
+                            <span>Remaining</span>
+                            <strong id="empApplyRemainingLeave">30</strong>
+                        </div>
+                    </div>
+
+                    <form id="leaveForm" class="leave-form">
+                        <div class="form-group">
+                            <label for="leaveType">Leave Type *</label>
+                            <select id="leaveType" required>
+                                <option value="">Select leave type</option>
+                                <option value="Annual Leave">Annual Leave</option>
+                                <option value="Sick Leave">Sick Leave</option>
+                                <option value="Casual Leave">Casual Leave</option>
+                                <option value="Maternity Leave">Maternity Leave</option>
+                                <option value="Paternity Leave">Paternity Leave</option>
+                                <option value="Bereavement Leave">Bereavement Leave</option>
+                                <option value="Study Leave">Study Leave</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="startDate">Start Date *</label>
+                                <input type="date" id="startDate" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="endDate">End Date *</label>
+                                <input type="date" id="endDate" required />
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="leaveDays">Number of Days *</label>
+                            <input type="number" id="leaveDays" min="0.5" step="0.5" placeholder="e.g., 2.5" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="leaveReason">Reason *</label>
+                            <textarea id="leaveReason" rows="4" placeholder="Please provide a detailed reason for your leave request..." required></textarea>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Submit Request</button>
+                            <button type="reset" class="btn btn-secondary">Clear Form</button>
+                        </div>
+                    </form>
+
+                    <div id="formMessage" class="form-message"></div>
+                </div>
+            </section>
+
+            <!-- Employee History View -->
+            <section id="empViewHistory" class="view-section" style="display: none;">
+                <div class="container">
+                    <h2>📋 Leave History</h2>
+                    <p class="section-subtitle">View all your past and pending leave requests</p>
+
+                    <div class="filter-bar">
+                        <input type="text" id="historySearch" placeholder="Search by type or reason..." />
+                        <select id="historyFilter">
+                            <option value="all">All Status</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="leave-table">
+                            <thead>
+                                <tr>
+                                    <th>Date Applied</th>
+                                    <th>Type</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
+                                    <th>Days</th>
+                                    <th>Status</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="empHistoryTableBody">
+                                <tr>
+                                    <td colspan="7" class="empty-message">No leave applications found</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <!-- ===== EMAILJS ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js">
+    </script>
+    <script>
+        (function() {
+            emailjs.init({
+                publicKey: "LVSbb6UwpBu6P5EI3",
+            });
+            console.log('✅ EmailJS initialized with public key');
+        })();
+    </script>
+
+    <script src="script.js"></script>
+</body>
+</html>
+</body>
+</html>
