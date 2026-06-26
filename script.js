@@ -8,25 +8,45 @@ const ADMIN_CONFIG = {
 const SUPABASE_URL = 'https://trqxbomtecdqpsnqnhke.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRycXhib210ZWNkcXBzbnFuaGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0NDA0NDYsImV4cCI6MjA5ODAxNjQ0Nn0.ktjdgU5q33oOPffrHVvAUS3sXmzufIe1NYL-M6F-SRU';
 
-// Initialize Supabase client
+// Initialize Supabase client - MORE ROBUST
 let supabaseClient = null;
 let supabaseEnabled = false;
 
-try {
-    if (typeof supabase !== 'undefined' && supabase.createClient) {
-        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+function initSupabase() {
+    try {
+        // Try multiple ways to get the Supabase client
+        let supabaseLib = null;
+        
+        if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
+            supabaseLib = window.supabase;
+            console.log('✅ Supabase found on window');
+        } else if (typeof supabase !== 'undefined' && supabase.createClient) {
+            supabaseLib = supabase;
+            console.log('✅ Supabase found globally');
+        } else {
+            console.warn('⚠️ Supabase not found, will retry...');
+            // Retry after 1 second
+            setTimeout(initSupabase, 1000);
+            return;
+        }
+        
+        supabaseClient = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         supabaseEnabled = true;
-        console.log('✅ Supabase client initialized');
-    } else if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        supabaseEnabled = true;
-        console.log('✅ Supabase client initialized from window');
-    } else {
-        console.log('ℹ️ Supabase not available - using localStorage only');
+        console.log('✅ Supabase client initialized successfully!');
+        
+        // Once Supabase is initialized, sync data
+        syncToSupabase();
+        
+    } catch (e) {
+        console.warn('⚠️ Supabase initialization error:', e);
+        supabaseEnabled = false;
+        // Retry after 2 seconds
+        setTimeout(initSupabase, 2000);
     }
-} catch (e) {
-    console.log('ℹ️ Supabase not available - using localStorage only');
 }
+
+// Start Supabase initialization
+initSupabase();
 
 const ALLOWED_DOMAINS = ['gmail.com', 'iiitmanipur.ac.in'];
 const TOTAL_LEAVE = 30;
@@ -121,10 +141,13 @@ function saveData() {
 }
 
 // ============================================
-// ===== SUPABASE SYNC - FIXED =====
+// ===== SUPABASE SYNC =====
 // ============================================
 async function syncToSupabase() {
-    if (!supabaseEnabled || isSyncing || !supabaseClient) return;
+    if (!supabaseEnabled || isSyncing || !supabaseClient) {
+        console.log('ℹ️ Supabase not ready, skipping sync');
+        return;
+    }
     
     try {
         isSyncing = true;
@@ -155,7 +178,10 @@ async function syncToSupabase() {
 }
 
 async function loadFromSupabase() {
-    if (!supabaseEnabled || !supabaseClient) return false;
+    if (!supabaseEnabled || !supabaseClient) {
+        console.log('ℹ️ Supabase not ready, skipping load');
+        return false;
+    }
     
     try {
         console.log('🔄 Loading from Supabase...');
@@ -243,7 +269,7 @@ function startAutoRefresh() {
     }
     
     refreshInterval = setInterval(async () => {
-        if (supabaseEnabled && (currentUserRole === 'admin' || currentUser)) {
+        if (supabaseEnabled && supabaseClient && (currentUserRole === 'admin' || currentUser)) {
             console.log('🔄 Auto-refreshing data...');
             await loadFromSupabase();
         }
@@ -394,7 +420,6 @@ function showAdminView(viewId) {
         if (navLink) navLink.classList.add('active');
     }
     
-    // Load fresh data before rendering
     loadDataAndRefresh(viewId);
 }
 
@@ -425,7 +450,7 @@ async function loadDataAndRefresh(viewId) {
     loadData();
     
     // Then try to load from Supabase
-    if (supabaseEnabled) {
+    if (supabaseEnabled && supabaseClient) {
         await loadFromSupabase();
     }
     
@@ -595,12 +620,10 @@ async function approveLeave(id) {
     leave.status = 'Approved';
     saveData();
     
-    // Force sync to Supabase
     if (supabaseEnabled) {
         await syncToSupabase();
     }
     
-    // Refresh admin views
     renderAdminDashboard();
     renderAdminUsers();
     showToast('✅ Leave request approved!', 'success');
@@ -612,12 +635,10 @@ async function rejectLeave(id) {
     leave.status = 'Rejected';
     saveData();
     
-    // Force sync to Supabase
     if (supabaseEnabled) {
         await syncToSupabase();
     }
     
-    // Refresh admin views
     renderAdminDashboard();
     renderAdminUsers();
     showToast('❌ Leave request rejected.', 'error');
@@ -778,11 +799,8 @@ document.getElementById('adminLoginForm').addEventListener('submit', async (e) =
     document.getElementById('adminLoginPage').style.display = 'none';
     document.getElementById('adminDashboard').style.display = 'block';
     
-    // Load fresh data from Supabase before rendering
     await loadFromSupabase();
     showAdminView('adminViewDashboard');
-    
-    // Start auto-refresh for admin
     startAutoRefresh();
 });
 
@@ -796,7 +814,6 @@ document.getElementById('employeeLoginForm').addEventListener('submit', async (e
     const password = document.getElementById('employeePassword').value.trim();
     const errorEl = document.getElementById('employeeLoginError');
     
-    // First load data from Supabase
     await loadFromSupabase();
     
     const user = users.find(u => u.email === email && u.password === password && u.role !== 'admin');
@@ -831,8 +848,6 @@ document.getElementById('employeeLoginForm').addEventListener('submit', async (e
     document.getElementById('employeeLoginPage').style.display = 'none';
     document.getElementById('employeeDashboard').style.display = 'block';
     showEmployeeView('empViewDashboard');
-    
-    // Start auto-refresh for employee
     startAutoRefresh();
 });
 
@@ -1047,7 +1062,6 @@ document.getElementById('leaveForm').addEventListener('submit', function(e) {
     leaves.push(leave);
     saveData();
     
-    // Force sync to Supabase
     if (supabaseEnabled) {
         setTimeout(() => {
             syncToSupabase();
@@ -1137,12 +1151,10 @@ setTimeout(() => {
     checkEmailJS();
 }, 1500);
 
-// Load from Supabase on startup
 setTimeout(async () => {
     if (supabaseEnabled && supabaseClient) {
         await loadFromSupabase();
     }
-    // If admin is already logged in (e.g., after page refresh), re-render
     if (currentUserRole === 'admin') {
         renderAdminDashboard();
         renderAdminUsers();
@@ -1152,7 +1164,7 @@ setTimeout(async () => {
         renderEmployeeHistory();
         startAutoRefresh();
     }
-}, 2000);
+}, 3000);
 
 document.addEventListener('DOMContentLoaded', () => {
     const today = new Date().toISOString().split('T')[0];
