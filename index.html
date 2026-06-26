@@ -176,22 +176,19 @@
             <!-- Admin Dashboard View -->
 <section id="adminViewDashboard" class="view-section">
     <div class="container">
-        <div class="dashboard-header">
-            <div>
-                <h2>🔧 Admin Panel</h2>
-                <p class="user-role">Manage leave requests and user accounts</p>
-            </div>
-            <div class="header-actions" style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button class="btn btn-primary" onclick="refreshData()" style="background: #50C878;">
-                    🔄 Refresh Data
-                </button>
-                <button class="btn btn-primary" onclick="forceSyncData()" style="background: #FF6B6B;">
-                    ⚡ Force Sync
-                </button>
-                <button class="btn btn-secondary" onclick="debugShowData()" style="background: #4A90D9; color: white;">
-                    🐛 Debug
-                </button>
-            </div>
+        <div class="header-actions" style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="refreshData()" style="background: #50C878;">
+                🔄 Refresh Data
+            </button>
+            <button class="btn btn-primary" onclick="forcePushData()" style="background: #FF6B6B;">
+                ⬆️ Push to Cloud
+            </button>
+            <button class="btn btn-primary" onclick="forcePullData()" style="background: #4A90D9;">
+                ⬇️ Pull from Cloud
+            </button>
+            <button class="btn btn-secondary" onclick="debugShowData()" style="background: #1A1A2E; color: white;">
+                🐛 Debug
+            </button>
         </div>
 
         <!-- Debug Panel -->
