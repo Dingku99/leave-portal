@@ -455,14 +455,14 @@
     <!-- ===== SCRIPTS - LOAD IN CORRECT ORDER ===== -->
     <!-- ========================================== -->
 
-    <!-- 1. Supabase SDK (Loads first) -->
+    <!-- 1. Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <!-- 2. EmailJS Library -->
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js">
     </script>
 
-    <!-- 3. Initialize EmailJS -->
+    <!-- 3. Initialize EmailJS with your public key -->
     <script>
         (function() {
             emailjs.init({
@@ -472,7 +472,7 @@
         })();
     </script>
 
-    <!-- 4. Your Main Script (Loads LAST) -->
+    <!-- 4. Your Main Script -->
     <script src="script.js"></script>
 
 </body>
