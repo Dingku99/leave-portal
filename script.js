@@ -32,7 +32,6 @@ function initSupabase() {
         supabaseEnabled = true;
         console.log('✅ Supabase client initialized successfully!');
         
-        // Test connection by trying to load data
         setTimeout(() => {
             if (supabaseEnabled) {
                 loadFromSupabase();
@@ -172,8 +171,10 @@ async function syncToSupabase() {
         }
         
         console.log('✅ Synced to Supabase successfully');
+        return true;
     } catch (e) {
-        console.log('⚠️ Supabase sync failed - data remains in localStorage');
+        console.log('⚠️ Supabase sync failed:', e);
+        return false;
     } finally {
         isSyncing = false;
     }
@@ -194,7 +195,10 @@ async function loadFromSupabase() {
             .select('*')
             .order('id', { ascending: true });
         
-        if (usersError) throw usersError;
+        if (usersError) {
+            console.error('❌ Users load error:', usersError);
+            throw usersError;
+        }
         
         // Load leaves from Supabase
         const { data: leavesData, error: leavesError } = await supabaseClient
@@ -202,41 +206,41 @@ async function loadFromSupabase() {
             .select('*')
             .order('id', { ascending: true });
         
-        if (leavesError) throw leavesError;
+        if (leavesError) {
+            console.error('❌ Leaves load error:', leavesError);
+            throw leavesError;
+        }
         
         console.log('📥 Supabase has - Users:', usersData ? usersData.length : 0, 'Leaves:', leavesData ? leavesData.length : 0);
         
         let dataUpdated = false;
         
-        // --- MERGE USERS ---
+        // --- REPLACE LEAVES FROM SUPABASE (instead of merge) ---
+        if (leavesData && leavesData.length > 0) {
+            // Replace local leaves with Supabase leaves
+            leaves = leavesData;
+            dataUpdated = true;
+            console.log('✅ Leaves replaced from Supabase:', leaves.length);
+        }
+        
+        // --- MERGE USERS (don't replace admin) ---
         if (usersData && usersData.length > 0) {
-            const existingUsersMap = {};
-            for (const u of users) {
-                existingUsersMap[u.id] = u;
-            }
+            // Keep admin from local, add new users from Supabase
+            const adminUser = users.find(u => u.role === 'admin');
+            const existingUserIds = new Set(users.map(u => u.id));
             
             for (const su of usersData) {
-                if (!existingUsersMap[su.id]) {
+                if (!existingUserIds.has(su.id)) {
                     users.push(su);
                     dataUpdated = true;
                     console.log('📥 New user from Supabase:', su.name);
                 }
             }
-        }
-        
-        // --- MERGE LEAVES ---
-        if (leavesData && leavesData.length > 0) {
-            const existingLeavesMap = {};
-            for (const l of leaves) {
-                existingLeavesMap[l.id] = l;
-            }
             
-            for (const sl of leavesData) {
-                if (!existingLeavesMap[sl.id]) {
-                    leaves.push(sl);
-                    dataUpdated = true;
-                    console.log('📥 New leave from Supabase:', sl.type, '-', sl.employeeName);
-                }
+            // Ensure admin is still there
+            if (adminUser && !users.find(u => u.id === adminUser.id)) {
+                users.push(adminUser);
+                dataUpdated = true;
             }
         }
         
@@ -251,11 +255,11 @@ async function loadFromSupabase() {
             } else if (currentUser) {
                 renderEmployeeDashboard();
             }
+            return true;
         } else {
             console.log('✅ No new data from Supabase');
+            return false;
         }
-        
-        return true;
     } catch (e) {
         console.log('⚠️ Failed to load from Supabase:', e);
         return false;
@@ -265,15 +269,51 @@ async function loadFromSupabase() {
 // ============================================
 // ===== FORCE SYNC (Push local data to Supabase) =====
 // ============================================
-async function forceSyncToSupabase() {
+async function forceSyncData() {
     if (!supabaseEnabled || !supabaseClient) {
-        console.log('ℹ️ Supabase not ready');
+        showToast('❌ Supabase not connected!', 'error');
         return;
     }
     
-    console.log('🔄 Force syncing local data to Supabase...');
-    await syncToSupabase();
-    showToast('✅ Data forced synced to cloud!', 'success');
+    showToast('🔄 Forcing sync...', 'success');
+    const success = await syncToSupabase();
+    if (success) {
+        showToast('✅ Data forced synced to cloud!', 'success');
+    } else {
+        showToast('❌ Sync failed! Check console.', 'error');
+    }
+}
+
+// ============================================
+// ===== DEBUG FUNCTION =====
+// ============================================
+function debugShowData() {
+    const panel = document.getElementById('debugPanel');
+    if (!panel) return;
+    
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    
+    const output = document.getElementById('debugOutput');
+    if (!output) return;
+    
+    output.innerHTML = `
+📊 DATA STATUS
+═══════════════════════════════
+📁 Local Users: ${users.length}
+📁 Local Leaves: ${leaves.length}
+📤 Supabase Connected: ${supabaseEnabled ? '✅ YES' : '❌ NO'}
+👤 Current User: ${currentUser ? currentUser.name : 'None'}
+🔑 Role: ${currentUserRole || 'None'}
+
+📋 LOCAL LEAVES:
+${leaves.length > 0 ? leaves.map(l => `  - ${l.type} (${l.status}) by ${l.employeeName}`).join('\n') : '  (none)'}
+
+👥 LOCAL USERS:
+${users.length > 0 ? users.map(u => `  - ${u.name} (${u.role})`).join('\n') : '  (none)'}
+
+💡 Click "🔄 Refresh Data" to load from Supabase
+💡 Click "⚡ Force Sync" to push local data to Supabase
+    `;
 }
 
 // ============================================
@@ -289,7 +329,7 @@ function startAutoRefresh() {
             console.log('🔄 Auto-refreshing data...');
             await loadFromSupabase();
         }
-    }, 5000); // Refresh every 5 seconds (faster)
+    }, 5000);
 }
 
 function stopAutoRefresh() {
@@ -1143,12 +1183,6 @@ function loadEmployeeCredentials() {
 async function refreshData() {
     showToast('🔄 Refreshing data...', 'success');
     
-    // First, force sync local data to Supabase (push)
-    if (supabaseEnabled && supabaseClient) {
-        await syncToSupabase();
-    }
-    
-    // Then load from Supabase (pull)
     if (supabaseEnabled && supabaseClient) {
         await loadFromSupabase();
     } else {
@@ -1178,7 +1212,6 @@ setTimeout(() => {
 setTimeout(async () => {
     if (supabaseEnabled && supabaseClient) {
         await loadFromSupabase();
-        // After loading, sync any local data that might not be in Supabase
         await syncToSupabase();
     }
     if (currentUserRole === 'admin') {
@@ -1207,3 +1240,4 @@ console.log('🔗 Supabase:', supabaseEnabled ? '✅ Connected' : '❌ Not conne
 console.log('📧 EmailJS:', typeof emailjs !== 'undefined' ? '✅ Loaded' : '❌ Not loaded');
 console.log('🔄 Auto-refresh: Every 5 seconds');
 console.log('💡 To refresh data manually, type refreshData() in console');
+console.log('🐛 To debug data, type debugShowData() in console');
