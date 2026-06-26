@@ -454,21 +454,25 @@
     <!-- ========================================== -->
     <!-- ===== SCRIPTS - LOAD IN CORRECT ORDER ===== -->
     <!-- ========================================== -->
-    <!-- Supabase SDK -->
+
+    <!-- 1. Supabase SDK (Loads first) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <!-- EmailJS Library -->
+    <!-- 2. EmailJS Library -->
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js">
     </script>
+
+    <!-- 3. Initialize EmailJS -->
     <script>
-       (function() {
-          emailjs.init({
-            publicKey: "LVSbb6UwpBu6P5EI3",
-          });
-       })();
+        (function() {
+            emailjs.init({
+                publicKey: "LVSbb6UwpBu6P5EI3",
+            });
+            console.log('✅ EmailJS initialized with public key');
+        })();
     </script>
 
-    <!-- Your script -->
+    <!-- 4. Your Main Script (Loads LAST) -->
     <script src="script.js"></script>
 
 </body>
