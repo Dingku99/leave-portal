@@ -5,16 +5,14 @@ const ADMIN_CONFIG = {
 };
 
 // ===== SUPABASE CONFIGURATION =====
-// Use the actual Supabase URL
 const SUPABASE_URL = 'https://trqxbomtecdqpsnqnhke.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRycXhib210ZWNkcXBzbnFuaGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0NDA0NDYsImV4cCI6MjA5ODAxNjQ0Nn0.ktjdgU5q33oOPffrHVvAUS3sXmzufIe1NYL-M6F-SRU';
 
-// Initialize Supabase client - with error handling for GitHub Pages
+// Initialize Supabase client - with error handling
 let supabaseClient = null;
 let supabaseEnabled = false;
 
 try {
-    // Check if supabase is available globally (loaded from CDN)
     if (typeof supabase !== 'undefined' && supabase.createClient) {
         supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         supabaseEnabled = true;
@@ -24,36 +22,16 @@ try {
         supabaseEnabled = true;
         console.log('✅ Supabase client initialized from window');
     } else {
-        // Try to load Supabase dynamically
-        console.log('🔄 Attempting to load Supabase dynamically...');
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-        script.onload = function() {
-            if (typeof supabase !== 'undefined' && supabase.createClient) {
-                supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                supabaseEnabled = true;
-                console.log('✅ Supabase client initialized dynamically');
-                // Reload data after Supabase loads
-                loadData();
-                renderAdminDashboard();
-                renderAdminUsers();
-            }
-        };
-        script.onerror = function() {
-            console.warn('⚠️ Failed to load Supabase - using localStorage only');
-            supabaseEnabled = false;
-        };
-        document.head.appendChild(script);
+        console.log('ℹ️ Supabase not available - using localStorage only');
     }
 } catch (e) {
-    console.warn('⚠️ Supabase initialization error:', e);
-    supabaseEnabled = false;
+    console.log('ℹ️ Supabase not available - using localStorage only');
 }
 
 const ALLOWED_DOMAINS = ['gmail.com', 'iiitmanipur.ac.in'];
 const TOTAL_LEAVE = 30;
 
-// ===== DATA STORE =====
+// ===== DATA STORE (DECLARED ONCE) =====
 let users = [];
 let leaves = [];
 let currentUser = null;
@@ -62,6 +40,7 @@ let leaveIdCounter = 1;
 let otpStorage = {};
 let isSyncing = false;
 let emailjsReady = false;
+let registrationData = {};
 
 // ============================================
 // ===== CHECK EMAILJS AVAILABILITY =====
@@ -130,7 +109,6 @@ function saveData() {
         localStorage.setItem('leaveIdCounter', String(leaveIdCounter));
         console.log('💾 Data saved to localStorage');
         
-        // Also sync to Supabase in the background
         if (supabaseEnabled && !isSyncing) {
             syncToSupabase();
         }
@@ -243,7 +221,6 @@ function sendOTP(email, otp) {
     
     console.log(`📧 OTP for ${email}: ${otp}`);
     
-    // Check if EmailJS is available
     if (typeof emailjs !== 'undefined' && emailjs.send) {
         console.log('📧 Sending OTP via EmailJS...');
         
@@ -798,8 +775,6 @@ document.getElementById('employeeLoginForm').addEventListener('submit', async (e
 // ============================================
 // ===== REGISTRATION =====
 // ============================================
-let registrationData = {};
-
 document.getElementById('registerForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -1070,12 +1045,10 @@ loadData();
 loadEmployeeCredentials();
 loadRecaptcha();
 
-// Check EmailJS availability
 setTimeout(() => {
     checkEmailJS();
 }, 1500);
 
-// Try to load from Supabase in the background
 setTimeout(async () => {
     if (supabaseEnabled && supabaseClient) {
         await loadFromSupabase();
