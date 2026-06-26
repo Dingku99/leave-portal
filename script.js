@@ -8,7 +8,7 @@ const ADMIN_CONFIG = {
 const SUPABASE_URL = 'https://trqxbomtecdqpsnqnhke.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRycXhib210ZWNkcXBzbnFuaGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0NDA0NDYsImV4cCI6MjA5ODAxNjQ0Nn0.ktjdgU5q33oOPffrHVvAUS3sXmzufIe1NYL-M6F-SRU';
 
-// Initialize Supabase client - with error handling
+// Initialize Supabase client
 let supabaseClient = null;
 let supabaseEnabled = false;
 
@@ -31,7 +31,7 @@ try {
 const ALLOWED_DOMAINS = ['gmail.com', 'iiitmanipur.ac.in'];
 const TOTAL_LEAVE = 30;
 
-// ===== DATA STORE (DECLARED ONCE) =====
+// ===== DATA STORE =====
 let users = [];
 let leaves = [];
 let currentUser = null;
@@ -95,10 +95,12 @@ function loadData() {
         }
         
         console.log('📁 Local data loaded - Users:', users.length, 'Leaves:', leaves.length);
+        return true;
     } catch (e) {
         console.warn('⚠️ Error loading data:', e);
         users = [];
         leaves = [];
+        return false;
     }
 }
 
@@ -118,7 +120,7 @@ function saveData() {
 }
 
 // ============================================
-// ===== SUPABASE SYNC =====
+// ===== SUPABASE SYNC - FIXED =====
 // ============================================
 async function syncToSupabase() {
     if (!supabaseEnabled || isSyncing || !supabaseClient) return;
@@ -155,6 +157,7 @@ async function loadFromSupabase() {
     try {
         console.log('🔄 Loading from Supabase...');
         
+        // Load users from Supabase
         const { data: usersData, error: usersError } = await supabaseClient
             .from('users')
             .select('*')
@@ -162,6 +165,7 @@ async function loadFromSupabase() {
         
         if (usersError) throw usersError;
         
+        // Load leaves from Supabase
         const { data: leavesData, error: leavesError } = await supabaseClient
             .from('leaves')
             .select('*')
@@ -169,34 +173,69 @@ async function loadFromSupabase() {
         
         if (leavesError) throw leavesError;
         
+        let dataUpdated = false;
+        
+        // --- MERGE USERS ---
         if (usersData && usersData.length > 0) {
-            const localIds = new Set(users.map(u => u.id));
-            let hasNewUsers = false;
+            // Create a map of existing users by ID
+            const existingUsersMap = {};
+            for (const u of users) {
+                existingUsersMap[u.id] = u;
+            }
+            
+            // Add any users from Supabase that don't exist locally
             for (const su of usersData) {
-                if (!localIds.has(su.id)) {
+                if (!existingUsersMap[su.id]) {
                     users.push(su);
-                    hasNewUsers = true;
+                    dataUpdated = true;
+                    console.log('📥 New user from Supabase:', su.name);
                 }
             }
-            if (hasNewUsers) {
-                console.log('✅ New users merged from Supabase');
-                saveData();
+            
+            // Also update existing users with latest data from Supabase (optional)
+            // This ensures data is consistent across devices
+            for (const su of usersData) {
+                if (existingUsersMap[su.id]) {
+                    // Update local user with Supabase data if different
+                    const localUser = existingUsersMap[su.id];
+                    if (localUser.verified !== su.verified || localUser.name !== su.name) {
+                        Object.assign(localUser, su);
+                        dataUpdated = true;
+                        console.log('🔄 Updated user from Supabase:', su.name);
+                    }
+                }
             }
         }
         
+        // --- MERGE LEAVES ---
         if (leavesData && leavesData.length > 0) {
-            const localLeaveIds = new Set(leaves.map(l => l.id));
-            let hasNewLeaves = false;
+            const existingLeavesMap = {};
+            for (const l of leaves) {
+                existingLeavesMap[l.id] = l;
+            }
+            
             for (const sl of leavesData) {
-                if (!localLeaveIds.has(sl.id)) {
+                if (!existingLeavesMap[sl.id]) {
                     leaves.push(sl);
-                    hasNewLeaves = true;
+                    dataUpdated = true;
+                    console.log('📥 New leave from Supabase:', sl.type, '-', sl.employeeName);
                 }
             }
-            if (hasNewLeaves) {
-                console.log('✅ New leaves merged from Supabase');
-                saveData();
+        }
+        
+        if (dataUpdated) {
+            // Save merged data to localStorage
+            localStorage.setItem('users', JSON.stringify(users));
+            localStorage.setItem('leaves', JSON.stringify(leaves));
+            console.log('✅ Data merged from Supabase - Users:', users.length, 'Leaves:', leaves.length);
+            
+            // Re-render admin dashboard if admin is logged in
+            if (currentUserRole === 'admin') {
+                renderAdminDashboard();
+                renderAdminUsers();
             }
+        } else {
+            console.log('✅ No new data from Supabase');
         }
         
         return true;
@@ -371,9 +410,8 @@ function showAdminView(viewId) {
         if (navLink) navLink.classList.add('active');
     }
     
-    loadData();
-    if (viewId === 'adminViewDashboard') renderAdminDashboard();
-    if (viewId === 'adminViewUsers') renderAdminUsers();
+    // Always load fresh data from Supabase before rendering
+    loadDataAndRefresh(viewId);
 }
 
 function showEmployeeView(viewId) {
@@ -392,16 +430,33 @@ function showEmployeeView(viewId) {
         if (navLink) navLink.classList.add('active');
     }
     
+    loadDataAndRefresh(viewId);
+}
+
+// ============================================
+// ===== LOAD DATA AND REFRESH VIEW =====
+// ============================================
+async function loadDataAndRefresh(viewId) {
+    // First load from localStorage
     loadData();
-    if (viewId === 'empViewDashboard') renderEmployeeDashboard();
-    if (viewId === 'empViewHistory') renderEmployeeHistory();
+    
+    // Then try to load from Supabase
+    if (supabaseEnabled) {
+        await loadFromSupabase();
+    }
+    
+    // Render the appropriate view
+    if (viewId === 'adminViewDashboard') renderAdminDashboard();
+    else if (viewId === 'adminViewUsers') renderAdminUsers();
+    else if (viewId === 'empViewDashboard') renderEmployeeDashboard();
+    else if (viewId === 'empViewHistory') renderEmployeeHistory();
 }
 
 // ============================================
 // ===== RENDER FUNCTIONS =====
 // ============================================
 function renderAdminDashboard() {
-    loadData();
+    // Always use the latest data from the global arrays
     const pending = getAllPending();
     const all = leaves;
     const approved = all.filter(l => l.status === 'Approved');
@@ -443,7 +498,6 @@ function renderAdminDashboard() {
 }
 
 function renderAdminUsers() {
-    loadData();
     const tbody = document.getElementById('userTableBody');
     const nonAdminUsers = users.filter(u => u.role !== 'admin');
     
@@ -556,6 +610,8 @@ async function approveLeave(id) {
     if (!leave) return;
     leave.status = 'Approved';
     saveData();
+    
+    // Refresh admin views
     renderAdminDashboard();
     renderAdminUsers();
     showToast('✅ Leave request approved!', 'success');
@@ -566,6 +622,8 @@ async function rejectLeave(id) {
     if (!leave) return;
     leave.status = 'Rejected';
     saveData();
+    
+    // Refresh admin views
     renderAdminDashboard();
     renderAdminUsers();
     showToast('❌ Leave request rejected.', 'error');
@@ -725,6 +783,9 @@ document.getElementById('adminLoginForm').addEventListener('submit', async (e) =
     currentUserRole = 'admin';
     document.getElementById('adminLoginPage').style.display = 'none';
     document.getElementById('adminDashboard').style.display = 'block';
+    
+    // Load fresh data from Supabase before rendering
+    await loadFromSupabase();
     showAdminView('adminViewDashboard');
 });
 
@@ -737,6 +798,9 @@ document.getElementById('employeeLoginForm').addEventListener('submit', async (e
     const email = document.getElementById('employeeEmail').value.trim();
     const password = document.getElementById('employeePassword').value.trim();
     const errorEl = document.getElementById('employeeLoginError');
+    
+    // First load data from Supabase
+    await loadFromSupabase();
     
     const user = users.find(u => u.email === email && u.password === password && u.role !== 'admin');
     
@@ -924,8 +988,7 @@ document.getElementById('empQuickApplyBtn').addEventListener('click', () => {
 });
 
 // ============================================
-// ===== HISTORY FILTERS =====
-// ============================================
+// ===== HISTORY FILTERS =====// ============================================
 document.getElementById('historySearch').addEventListener('input', applyHistoryFilters);
 document.getElementById('historyFilter').addEventListener('change', applyHistoryFilters);
 
@@ -1039,6 +1102,22 @@ function loadEmployeeCredentials() {
 }
 
 // ============================================
+// ===== REFRESH DATA (Manual trigger) =====
+// ============================================
+async function refreshData() {
+    showToast('🔄 Refreshing data...', 'success');
+    await loadFromSupabase();
+    if (currentUserRole === 'admin') {
+        renderAdminDashboard();
+        renderAdminUsers();
+    } else if (currentUser) {
+        renderEmployeeDashboard();
+        renderEmployeeHistory();
+    }
+    showToast('✅ Data refreshed!', 'success');
+}
+
+// ============================================
 // ===== INIT =====
 // ============================================
 loadData();
@@ -1049,10 +1128,12 @@ setTimeout(() => {
     checkEmailJS();
 }, 1500);
 
+// Load from Supabase on startup
 setTimeout(async () => {
     if (supabaseEnabled && supabaseClient) {
         await loadFromSupabase();
     }
+    // If admin is already logged in (e.g., after page refresh), re-render
     if (currentUserRole === 'admin') {
         renderAdminDashboard();
         renderAdminUsers();
@@ -1060,7 +1141,7 @@ setTimeout(async () => {
         renderEmployeeDashboard();
         renderEmployeeHistory();
     }
-}, 3000);
+}, 2000);
 
 document.addEventListener('DOMContentLoaded', () => {
     const today = new Date().toISOString().split('T')[0];
@@ -1075,3 +1156,4 @@ console.log('👤 Admin:', ADMIN_CONFIG.email);
 console.log('📝 Allowed domains:', ALLOWED_DOMAINS.join(', '));
 console.log('🔗 Supabase:', supabaseEnabled ? '✅ Connected' : '❌ Not connected (using localStorage only)');
 console.log('📧 EmailJS:', typeof emailjs !== 'undefined' ? '✅ Loaded' : '❌ Not loaded');
+console.log('💡 To refresh data manually, type refreshData() in console');
