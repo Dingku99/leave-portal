@@ -4,10 +4,30 @@ const ADMIN_CONFIG = {
     password: 'admin123'
 };
 
-const EMAILJS_CONFIG = {
-    serviceID: 'service_d41vznp',
-    templateID: 'template_3c6botb'
-};
+// ===== SUPABASE CONFIGURATION =====
+const SUPABASE_URL = 'https://trqxbomtecdqpsnqnhke.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRycXhib210ZWNkcXBzbnFuaGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0NDA0NDYsImV4cCI6MjA5ODAxNjQ0Nn0.ktjdgU5q33oOPffrHVvAUS3sXmzufIe1NYL-M6F-SRU';
+
+// Initialize Supabase client - try to use existing or create new
+let supabaseClient = null;
+let supabaseEnabled = false;
+
+try {
+    // Check if supabase is available globally
+    if (typeof supabase !== 'undefined' && supabase.createClient) {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        supabaseEnabled = true;
+        console.log('✅ Supabase client initialized');
+    } else if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        supabaseEnabled = true;
+        console.log('✅ Supabase client initialized from window');
+    } else {
+        console.log('ℹ️ Supabase not available - using localStorage only');
+    }
+} catch (e) {
+    console.log('ℹ️ Supabase not available - using localStorage only');
+}
 
 const ALLOWED_DOMAINS = ['gmail.com', 'iiitmanipur.ac.in'];
 const TOTAL_LEAVE = 30;
@@ -19,14 +39,16 @@ let currentUser = null;
 let currentUserRole = null;
 let leaveIdCounter = 1;
 let otpStorage = {};
+let isSyncing = false;
 
+// ============================================
 // ===== LOAD FROM LOCAL STORAGE =====
+// ============================================
 function loadData() {
-    const storedLeaves = localStorage.getItem('leaves');
     const storedUsers = localStorage.getItem('users');
+    const storedLeaves = localStorage.getItem('leaves');
     const storedCounter = localStorage.getItem('leaveIdCounter');
     
-    if (storedLeaves) leaves = JSON.parse(storedLeaves);
     if (storedUsers) {
         users = JSON.parse(storedUsers);
     } else {
@@ -42,13 +64,118 @@ function loadData() {
         ];
         saveData();
     }
-    if (storedCounter) leaveIdCounter = parseInt(storedCounter);
+    
+    if (storedLeaves) {
+        leaves = JSON.parse(storedLeaves);
+    } else {
+        leaves = [];
+    }
+    
+    if (storedCounter) {
+        leaveIdCounter = parseInt(storedCounter);
+    } else {
+        leaveIdCounter = 1;
+    }
+    
+    console.log('📁 Local data loaded - Users:', users.length, 'Leaves:', leaves.length);
 }
 
 function saveData() {
-    localStorage.setItem('leaves', JSON.stringify(leaves));
     localStorage.setItem('users', JSON.stringify(users));
+    localStorage.setItem('leaves', JSON.stringify(leaves));
     localStorage.setItem('leaveIdCounter', String(leaveIdCounter));
+    console.log('💾 Data saved to localStorage');
+    
+    // Also sync to Supabase in the background
+    syncToSupabase();
+}
+
+// ============================================
+// ===== SUPABASE SYNC =====
+// ============================================
+async function syncToSupabase() {
+    if (!supabaseEnabled || isSyncing) return;
+    
+    try {
+        isSyncing = true;
+        console.log('🔄 Syncing to Supabase...');
+        
+        // Sync users
+        for (const user of users) {
+            const { error } = await supabaseClient
+                .from('users')
+                .upsert(user, { onConflict: 'id' });
+            if (error) console.error('Error syncing user:', error);
+        }
+        
+        // Sync leaves
+        for (const leave of leaves) {
+            const { error } = await supabaseClient
+                .from('leaves')
+                .upsert(leave, { onConflict: 'id' });
+            if (error) console.error('Error syncing leave:', error);
+        }
+        
+        console.log('✅ Synced to Supabase successfully');
+    } catch (e) {
+        console.log('⚠️ Supabase sync failed - data remains in localStorage');
+    } finally {
+        isSyncing = false;
+    }
+}
+
+async function loadFromSupabase() {
+    if (!supabaseEnabled) return false;
+    
+    try {
+        console.log('🔄 Loading from Supabase...');
+        
+        // Load users
+        const { data: usersData, error: usersError } = await supabaseClient
+            .from('users')
+            .select('*')
+            .order('id', { ascending: true });
+        
+        if (usersError) throw usersError;
+        
+        // Load leaves
+        const { data: leavesData, error: leavesError } = await supabaseClient
+            .from('leaves')
+            .select('*')
+            .order('id', { ascending: true });
+        
+        if (leavesError) throw leavesError;
+        
+        // Merge data - prefer Supabase if it has data, otherwise keep local
+        if (usersData && usersData.length > 0) {
+            // Check if Supabase has more users than local
+            if (usersData.length > users.length) {
+                users = usersData;
+                console.log('✅ Users loaded from Supabase:', users.length);
+            } else {
+                // Sync local users to Supabase
+                await syncToSupabase();
+            }
+        }
+        
+        if (leavesData && leavesData.length > 0) {
+            // Merge leaves - combine both
+            const existingIds = new Set(leaves.map(l => l.id));
+            for (const leave of leavesData) {
+                if (!existingIds.has(leave.id)) {
+                    leaves.push(leave);
+                }
+            }
+            console.log('✅ Leaves merged from Supabase:', leaves.length);
+        }
+        
+        // Save merged data to localStorage
+        saveData();
+        return true;
+    } catch (e) {
+        console.log('⚠️ Failed to load from Supabase:', e);
+        return false;
+    }
 }
 
 // ============================================
@@ -76,6 +203,7 @@ function getAllPending() {
 }
 
 function formatDate(dateStr) {
+    if (!dateStr) return '';
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -99,37 +227,12 @@ function generateOTP() {
 }
 
 function sendOTP(email, otp) {
-    // Store OTP with timestamp
     otpStorage[email] = {
         otp: otp,
         timestamp: Date.now()
     };
-    
     console.log(`📧 OTP for ${email}: ${otp}`);
-    
-    // Check if EmailJS is available
-    if (typeof emailjs !== 'undefined' && emailjs.send) {
-        emailjs.send(
-            EMAILJS_CONFIG.serviceID,
-            EMAILJS_CONFIG.templateID,
-            {
-                to_email: email,
-                otp_code: otp,
-                subject: 'Your OTP for IIITM Leave Portal'
-            }
-        )
-        .then(function(response) {
-            console.log('✅ OTP email sent successfully!', response.status);
-        })
-        .catch(function(error) {
-            console.log('❌ EmailJS error:', error);
-            // Fallback: show OTP in alert
-            alert(`⚠️ OTP for ${email}: ${otp}\n\n(Email send failed. Use this OTP to verify.)`);
-        });
-    } else {
-        // EmailJS not loaded - show OTP in alert
-        alert(`⚠️ OTP for ${email}: ${otp}\n\n(Use this OTP to verify.)`);
-    }
+    alert(`⚠️ OTP for ${email}: ${otp}\n\n(Use this OTP to verify.)`);
 }
 
 function verifyOTP(email, otpInput) {
@@ -137,17 +240,14 @@ function verifyOTP(email, otpInput) {
     if (!stored) {
         return { valid: false, message: 'No OTP found. Please request a new one.' };
     }
-    
     if (Date.now() - stored.timestamp > 5 * 60 * 1000) {
         delete otpStorage[email];
         return { valid: false, message: 'OTP expired. Please request a new one.' };
     }
-    
     if (stored.otp === otpInput) {
         delete otpStorage[email];
         return { valid: true, message: 'OTP verified successfully!' };
     }
-    
     return { valid: false, message: 'Invalid OTP. Please try again.' };
 }
 
@@ -157,7 +257,7 @@ function verifyOTP(email, otpInput) {
 function loadRecaptcha() {
     try {
         const script = document.createElement('script');
-        script.src = `https://www.google.com/recaptcha/api.js?render=6LednjQtAAAAAGF95tNXfXWJ8PC3YdilfgWrRTH6`;
+        script.src = 'https://www.google.com/recaptcha/api.js?render=6LednjQtAAAAAGF95tNXfXWJ8PC3YdilfgWrRTH6';
         script.async = true;
         script.defer = true;
         document.head.appendChild(script);
@@ -174,7 +274,6 @@ function verifyCaptcha(action = 'login') {
             resolve(true);
             return;
         }
-        
         try {
             grecaptcha.ready(() => {
                 grecaptcha.execute('6LednjQtAAAAAGF95tNXfXWJ8PC3YdilfgWrRTH6', { action: action })
@@ -190,7 +289,6 @@ function verifyCaptcha(action = 'login') {
             console.warn('⚠️ reCAPTCHA error:', e);
             resolve(true);
         }
-        
         setTimeout(() => resolve(true), 3000);
     });
 }
@@ -297,7 +395,7 @@ function renderAdminUsers() {
     const nonAdminUsers = users.filter(u => u.role !== 'admin');
     
     if (nonAdminUsers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-message">No users registered</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-message">No users registered</td></tr>';
         return;
     }
     
@@ -390,7 +488,6 @@ function applyHistoryFilters() {
         const text = row.textContent.toLowerCase();
         const statusCell = row.querySelector('.status-badge');
         const statusText = statusCell ? statusCell.textContent : '';
-        
         let show = true;
         if (search && !text.includes(search)) show = false;
         if (filter !== 'all' && statusText !== filter) show = false;
@@ -404,7 +501,6 @@ function applyHistoryFilters() {
 function approveLeave(id) {
     const leave = leaves.find(l => l.id === id);
     if (!leave) return;
-    
     leave.status = 'Approved';
     saveData();
     renderAdminDashboard();
@@ -415,7 +511,6 @@ function approveLeave(id) {
 function rejectLeave(id) {
     const leave = leaves.find(l => l.id === id);
     if (!leave) return;
-    
     leave.status = 'Rejected';
     saveData();
     renderAdminDashboard();
@@ -430,9 +525,7 @@ function deleteUser(userId) {
         showToast('❌ Cannot delete admin user.', 'error');
         return;
     }
-    
     if (!confirm(`⚠️ Are you sure you want to delete ${user.name}?`)) return;
-    
     leaves = leaves.filter(l => l.employeeEmail !== user.email);
     users = users.filter(u => u.id !== userId);
     saveData();
@@ -467,7 +560,6 @@ function showToast(message, type = 'success') {
         font-size: 0.95rem;
     `;
     document.body.appendChild(toast);
-    
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(20px)';
@@ -482,6 +574,16 @@ style.textContent = `
     @keyframes slideIn {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+    .password-cell {
+        font-family: 'Courier New', monospace;
+        background: #F8FAFE;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        letter-spacing: 0.5px;
+        border: 1px dashed #D0D0D8;
+        display: inline-block;
     }
 `;
 document.head.appendChild(style);
@@ -563,7 +665,6 @@ document.getElementById('employeeLoginForm').addEventListener('submit', async (e
         errorEl.textContent = '❌ Invalid email or password.';
         return;
     }
-    
     if (!user.verified) {
         errorEl.textContent = '❌ Email not verified. Please verify your email first.';
         return;
@@ -610,19 +711,16 @@ document.getElementById('registerForm').addEventListener('submit', function(e) {
         errorEl.style.color = '#FF6B6B';
         return;
     }
-    
     if (!name || !email || !password) {
         errorEl.textContent = '❌ Please fill in all fields.';
         errorEl.style.color = '#FF6B6B';
         return;
     }
-    
     if (password.length < 6) {
         errorEl.textContent = '❌ Password must be at least 6 characters.';
         errorEl.style.color = '#FF6B6B';
         return;
     }
-    
     if (users.find(u => u.email === email)) {
         errorEl.textContent = '❌ Email already registered. Please login.';
         errorEl.style.color = '#FF6B6B';
@@ -630,14 +728,12 @@ document.getElementById('registerForm').addEventListener('submit', function(e) {
     }
     
     registrationData = { name, email, password };
-    
     const otp = generateOTP();
     sendOTP(email, otp);
     
     document.getElementById('registerForm').style.display = 'none';
     document.getElementById('otpSection').style.display = 'block';
     document.getElementById('otpEmailDisplay').textContent = email;
-    
     errorEl.textContent = '📧 OTP sent! Please check your email.';
     errorEl.style.color = '#50C878';
 });
@@ -664,15 +760,15 @@ document.getElementById('verifyOtpBtn').addEventListener('click', function() {
     }
     
     const result = verifyOTP(registrationData.email, otpInput);
-    
     if (!result.valid) {
         errorEl.textContent = `❌ ${result.message}`;
         errorEl.style.color = '#FF6B6B';
         return;
     }
     
+    const maxId = users.reduce((max, u) => Math.max(max, u.id), 0);
     const newUser = {
-        id: users.length + 1,
+        id: maxId + 1,
         name: registrationData.name,
         email: registrationData.email,
         password: registrationData.password,
@@ -690,12 +786,10 @@ document.getElementById('verifyOtpBtn').addEventListener('click', function() {
     document.getElementById('registerForm').style.display = 'block';
     document.getElementById('otpSection').style.display = 'none';
     document.getElementById('otpInput').value = '';
-    
     document.getElementById('employeeEmail').value = newUser.email;
     document.getElementById('employeePassword').value = newUser.password;
     
     showToast('✅ Account created successfully! Please login.', 'success');
-    
     setTimeout(() => {
         errorEl.textContent = '';
     }, 5000);
@@ -761,7 +855,7 @@ document.getElementById('historyFilter').addEventListener('change', applyHistory
 // ============================================
 // ===== LEAVE FORM =====
 // ============================================
-document.getElementById('leaveForm').addEventListener('submit', (e) => {
+document.getElementById('leaveForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const type = document.getElementById('leaveType').value;
@@ -776,28 +870,26 @@ document.getElementById('leaveForm').addEventListener('submit', (e) => {
         messageEl.className = 'form-message error';
         return;
     }
-    
     if (days <= 0) {
         messageEl.textContent = '❌ Number of days must be greater than 0.';
         messageEl.className = 'form-message error';
         return;
     }
-    
     const remaining = getRemainingLeave(currentUser.email);
     if (days > remaining) {
         messageEl.textContent = `❌ You only have ${remaining} days of leave remaining.`;
         messageEl.className = 'form-message error';
         return;
     }
-    
     if (new Date(startDate) > new Date(endDate)) {
         messageEl.textContent = '❌ Start date must be before end date.';
         messageEl.className = 'form-message error';
         return;
     }
     
+    const maxId = leaves.reduce((max, l) => Math.max(max, l.id), 0);
     const leave = {
-        id: leaveIdCounter++,
+        id: maxId + 1,
         employeeEmail: currentUser.email,
         employeeName: currentUser.name,
         type: type,
@@ -814,7 +906,6 @@ document.getElementById('leaveForm').addEventListener('submit', (e) => {
     
     messageEl.textContent = '✅ Leave request submitted successfully! Waiting for approval.';
     messageEl.className = 'form-message success';
-    
     document.getElementById('leaveForm').reset();
     renderEmployeeDashboard();
     showToast('✅ Leave request submitted!', 'success');
@@ -877,6 +968,19 @@ loadData();
 loadEmployeeCredentials();
 loadRecaptcha();
 
+// Try to load from Supabase in the background
+setTimeout(async () => {
+    await loadFromSupabase();
+    // Re-render if admin is logged in
+    if (currentUserRole === 'admin') {
+        renderAdminDashboard();
+        renderAdminUsers();
+    } else if (currentUser) {
+        renderEmployeeDashboard();
+        renderEmployeeHistory();
+    }
+}, 2000);
+
 document.addEventListener('DOMContentLoaded', () => {
     const today = new Date().toISOString().split('T')[0];
     const startDate = document.getElementById('startDate');
@@ -888,4 +992,4 @@ document.addEventListener('DOMContentLoaded', () => {
 console.log('🏛️ IIITM Leave Portal loaded successfully!');
 console.log('👤 Admin:', ADMIN_CONFIG.email);
 console.log('📝 Allowed domains:', ALLOWED_DOMAINS.join(', '));
-console.log('💡 Check console for OTP details');
+console.log('🔗 Supabase:', supabaseEnabled ? '✅ Connected' : '❌ Not connected (using localStorage only)');
