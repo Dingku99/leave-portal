@@ -8,13 +8,12 @@ const ADMIN_CONFIG = {
 const SUPABASE_URL = 'https://trqxbomtecdqpsnqnhke.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRycXhib210ZWNkcXBzbnFuaGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0NDA0NDYsImV4cCI6MjA5ODAxNjQ0Nn0.ktjdgU5q33oOPffrHVvAUS3sXmzufIe1NYL-M6F-SRU';
 
-// Initialize Supabase client - MORE ROBUST
+// Initialize Supabase client
 let supabaseClient = null;
 let supabaseEnabled = false;
 
 function initSupabase() {
     try {
-        // Try multiple ways to get the Supabase client
         let supabaseLib = null;
         
         if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
@@ -25,7 +24,6 @@ function initSupabase() {
             console.log('✅ Supabase found globally');
         } else {
             console.warn('⚠️ Supabase not found, will retry...');
-            // Retry after 1 second
             setTimeout(initSupabase, 1000);
             return;
         }
@@ -34,18 +32,20 @@ function initSupabase() {
         supabaseEnabled = true;
         console.log('✅ Supabase client initialized successfully!');
         
-        // Once Supabase is initialized, sync data
-        syncToSupabase();
+        // Test connection by trying to load data
+        setTimeout(() => {
+            if (supabaseEnabled) {
+                loadFromSupabase();
+            }
+        }, 1000);
         
     } catch (e) {
         console.warn('⚠️ Supabase initialization error:', e);
         supabaseEnabled = false;
-        // Retry after 2 seconds
         setTimeout(initSupabase, 2000);
     }
 }
 
-// Start Supabase initialization
 initSupabase();
 
 const ALLOWED_DOMAINS = ['gmail.com', 'iiitmanipur.ac.in'];
@@ -64,7 +64,7 @@ let registrationData = {};
 let refreshInterval = null;
 
 // ============================================
-// ===== CHECK EMAILJS AVAILABILITY =====
+// ===== CHECK EMAILJS =====
 // ============================================
 function checkEmailJS() {
     if (typeof emailjs !== 'undefined' && emailjs.send) {
@@ -152,6 +152,8 @@ async function syncToSupabase() {
     try {
         isSyncing = true;
         console.log('🔄 Syncing to Supabase...');
+        console.log('📤 Users to sync:', users.length);
+        console.log('📤 Leaves to sync:', leaves.length);
         
         // Sync users
         for (const user of users) {
@@ -202,6 +204,8 @@ async function loadFromSupabase() {
         
         if (leavesError) throw leavesError;
         
+        console.log('📥 Supabase has - Users:', usersData ? usersData.length : 0, 'Leaves:', leavesData ? leavesData.length : 0);
+        
         let dataUpdated = false;
         
         // --- MERGE USERS ---
@@ -237,12 +241,10 @@ async function loadFromSupabase() {
         }
         
         if (dataUpdated) {
-            // Save merged data to localStorage
             localStorage.setItem('users', JSON.stringify(users));
             localStorage.setItem('leaves', JSON.stringify(leaves));
             console.log('✅ Data merged from Supabase - Users:', users.length, 'Leaves:', leaves.length);
             
-            // Re-render if admin is logged in
             if (currentUserRole === 'admin') {
                 renderAdminDashboard();
                 renderAdminUsers();
@@ -261,7 +263,21 @@ async function loadFromSupabase() {
 }
 
 // ============================================
-// ===== AUTO-REFRESH (Every 10 seconds) =====
+// ===== FORCE SYNC (Push local data to Supabase) =====
+// ============================================
+async function forceSyncToSupabase() {
+    if (!supabaseEnabled || !supabaseClient) {
+        console.log('ℹ️ Supabase not ready');
+        return;
+    }
+    
+    console.log('🔄 Force syncing local data to Supabase...');
+    await syncToSupabase();
+    showToast('✅ Data forced synced to cloud!', 'success');
+}
+
+// ============================================
+// ===== AUTO-REFRESH =====
 // ============================================
 function startAutoRefresh() {
     if (refreshInterval) {
@@ -273,7 +289,7 @@ function startAutoRefresh() {
             console.log('🔄 Auto-refreshing data...');
             await loadFromSupabase();
         }
-    }, 10000); // Refresh every 10 seconds
+    }, 5000); // Refresh every 5 seconds (faster)
 }
 
 function stopAutoRefresh() {
@@ -446,15 +462,12 @@ function showEmployeeView(viewId) {
 // ===== LOAD DATA AND REFRESH VIEW =====
 // ============================================
 async function loadDataAndRefresh(viewId) {
-    // First load from localStorage
     loadData();
     
-    // Then try to load from Supabase
     if (supabaseEnabled && supabaseClient) {
         await loadFromSupabase();
     }
     
-    // Render the appropriate view
     if (viewId === 'adminViewDashboard') renderAdminDashboard();
     else if (viewId === 'adminViewUsers') renderAdminUsers();
     else if (viewId === 'empViewDashboard') renderEmployeeDashboard();
@@ -465,7 +478,6 @@ async function loadDataAndRefresh(viewId) {
 // ===== RENDER FUNCTIONS =====
 // ============================================
 function renderAdminDashboard() {
-    // Always use the latest data from the global arrays
     const pending = getAllPending();
     const all = leaves;
     const approved = all.filter(l => l.status === 'Approved');
@@ -1130,7 +1142,19 @@ function loadEmployeeCredentials() {
 // ============================================
 async function refreshData() {
     showToast('🔄 Refreshing data...', 'success');
-    await loadFromSupabase();
+    
+    // First, force sync local data to Supabase (push)
+    if (supabaseEnabled && supabaseClient) {
+        await syncToSupabase();
+    }
+    
+    // Then load from Supabase (pull)
+    if (supabaseEnabled && supabaseClient) {
+        await loadFromSupabase();
+    } else {
+        loadData();
+    }
+    
     if (currentUserRole === 'admin') {
         renderAdminDashboard();
         renderAdminUsers();
@@ -1154,6 +1178,8 @@ setTimeout(() => {
 setTimeout(async () => {
     if (supabaseEnabled && supabaseClient) {
         await loadFromSupabase();
+        // After loading, sync any local data that might not be in Supabase
+        await syncToSupabase();
     }
     if (currentUserRole === 'admin') {
         renderAdminDashboard();
@@ -1179,5 +1205,5 @@ console.log('👤 Admin:', ADMIN_CONFIG.email);
 console.log('📝 Allowed domains:', ALLOWED_DOMAINS.join(', '));
 console.log('🔗 Supabase:', supabaseEnabled ? '✅ Connected' : '❌ Not connected (using localStorage only)');
 console.log('📧 EmailJS:', typeof emailjs !== 'undefined' ? '✅ Loaded' : '❌ Not loaded');
-console.log('🔄 Auto-refresh: Every 10 seconds');
+console.log('🔄 Auto-refresh: Every 5 seconds');
 console.log('💡 To refresh data manually, type refreshData() in console');
