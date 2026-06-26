@@ -174,63 +174,74 @@
 
         <div class="dashboard-content">
             <!-- Admin Dashboard View -->
-            <section id="adminViewDashboard" class="view-section">
-                <div class="container">
-                    <div class="dashboard-header">
-                        <div>
-                            <h2>🔧 Admin Panel</h2>
-                            <p class="user-role">Manage leave requests and user accounts</p>
-                        </div>
-                        <div class="header-actions">
-                            <button class="btn btn-primary" onclick="refreshData()" style="background: #50C878;">
-                                🔄 Refresh Data
-                            </button>
-                        </div>
-                    </div>
+<section id="adminViewDashboard" class="view-section">
+    <div class="container">
+        <div class="dashboard-header">
+            <div>
+                <h2>🔧 Admin Panel</h2>
+                <p class="user-role">Manage leave requests and user accounts</p>
+            </div>
+            <div class="header-actions" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-primary" onclick="refreshData()" style="background: #50C878;">
+                    🔄 Refresh Data
+                </button>
+                <button class="btn btn-primary" onclick="forceSyncData()" style="background: #FF6B6B;">
+                    ⚡ Force Sync
+                </button>
+                <button class="btn btn-secondary" onclick="debugShowData()" style="background: #4A90D9; color: white;">
+                    🐛 Debug
+                </button>
+            </div>
+        </div>
 
-                    <div class="admin-stats">
-                        <div class="admin-stat-card">
-                            <span>Total Requests</span>
-                            <strong id="adminTotalRequests">0</strong>
-                        </div>
-                        <div class="admin-stat-card">
-                            <span>Pending</span>
-                            <strong id="adminPendingRequests" style="color: #FF6B6B;">0</strong>
-                        </div>
-                        <div class="admin-stat-card">
-                            <span>Approved</span>
-                            <strong id="adminApprovedRequests" style="color: #50C878;">0</strong>
-                        </div>
-                        <div class="admin-stat-card">
-                            <span>Rejected</span>
-                            <strong id="adminRejectedRequests" style="color: #FF6B6B;">0</strong>
-                        </div>
-                    </div>
+        <!-- Debug Panel -->
+        <div id="debugPanel" style="display: none; background: #1A1A2E; color: #50C878; padding: 16px; border-radius: 12px; margin-bottom: 20px; font-family: monospace; font-size: 0.85rem; max-height: 200px; overflow: auto;">
+            <div id="debugOutput">Click "🐛 Debug" to check data status</div>
+        </div>
 
-                    <h3>📋 Leave Requests</h3>
-                    <div class="table-container">
-                        <table class="leave-table admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Employee</th>
-                                    <th>Type</th>
-                                    <th>Days</th>
-                                    <th>Start Date</th>
-                                    <th>End Date</th>
-                                    <th>Reason</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="adminTableBody">
-                                <tr>
-                                    <td colspan="8" class="empty-message">No leave requests to review</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
+        <div class="admin-stats">
+            <div class="admin-stat-card">
+                <span>Total Requests</span>
+                <strong id="adminTotalRequests">0</strong>
+            </div>
+            <div class="admin-stat-card">
+                <span>Pending</span>
+                <strong id="adminPendingRequests" style="color: #FF6B6B;">0</strong>
+            </div>
+            <div class="admin-stat-card">
+                <span>Approved</span>
+                <strong id="adminApprovedRequests" style="color: #50C878;">0</strong>
+            </div>
+            <div class="admin-stat-card">
+                <span>Rejected</span>
+                <strong id="adminRejectedRequests" style="color: #FF6B6B;">0</strong>
+            </div>
+        </div>
+
+        <h3>📋 Leave Requests</h3>
+        <div class="table-container">
+            <table class="leave-table admin-table">
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Type</th>
+                        <th>Days</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="adminTableBody">
+                    <tr>
+                        <td colspan="8" class="empty-message">No leave requests to review</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
 
             <!-- Admin Users View -->
             <section id="adminViewUsers" class="view-section" style="display: none;">
