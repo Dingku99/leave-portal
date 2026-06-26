@@ -129,7 +129,7 @@ function saveData() {
         localStorage.setItem('users', JSON.stringify(users));
         localStorage.setItem('leaves', JSON.stringify(leaves));
         localStorage.setItem('leaveIdCounter', String(leaveIdCounter));
-        console.log('💾 Data saved to localStorage');
+        console.log('💾 Data saved to localStorage - Leaves:', leaves.length);
         
         if (supabaseEnabled && !isSyncing) {
             syncToSupabase();
@@ -140,7 +140,7 @@ function saveData() {
 }
 
 // ============================================
-// ===== SUPABASE SYNC =====
+// ===== SUPABASE SYNC (FIXED) =====
 // ============================================
 async function syncToSupabase() {
     if (!supabaseEnabled || isSyncing || !supabaseClient) {
@@ -215,18 +215,31 @@ async function loadFromSupabase() {
         
         let dataUpdated = false;
         
-        // --- REPLACE LEAVES FROM SUPABASE (instead of merge) ---
+        // --- MERGE LEAVES (KEEP BOTH LOCAL AND SUPABASE) ---
         if (leavesData && leavesData.length > 0) {
-            // Replace local leaves with Supabase leaves
-            leaves = leavesData;
-            dataUpdated = true;
-            console.log('✅ Leaves replaced from Supabase:', leaves.length);
+            // Create a map of existing leaf IDs
+            const existingLeafIds = new Set(leaves.map(l => l.id));
+            
+            // Add any leaves from Supabase that don't exist locally
+            for (const sl of leavesData) {
+                if (!existingLeafIds.has(sl.id)) {
+                    leaves.push(sl);
+                    dataUpdated = true;
+                    console.log('📥 New leave from Supabase:', sl.type, '-', sl.employeeName);
+                } else {
+                    // Update existing leaf with Supabase data (status might have changed)
+                    const localLeaf = leaves.find(l => l.id === sl.id);
+                    if (localLeaf && localLeaf.status !== sl.status) {
+                        localLeaf.status = sl.status;
+                        dataUpdated = true;
+                        console.log('🔄 Updated leave status:', sl.id, '->', sl.status);
+                    }
+                }
+            }
         }
         
-        // --- MERGE USERS (don't replace admin) ---
+        // --- MERGE USERS ---
         if (usersData && usersData.length > 0) {
-            // Keep admin from local, add new users from Supabase
-            const adminUser = users.find(u => u.role === 'admin');
             const existingUserIds = new Set(users.map(u => u.id));
             
             for (const su of usersData) {
@@ -235,12 +248,6 @@ async function loadFromSupabase() {
                     dataUpdated = true;
                     console.log('📥 New user from Supabase:', su.name);
                 }
-            }
-            
-            // Ensure admin is still there
-            if (adminUser && !users.find(u => u.id === adminUser.id)) {
-                users.push(adminUser);
-                dataUpdated = true;
             }
         }
         
@@ -267,7 +274,7 @@ async function loadFromSupabase() {
 }
 
 // ============================================
-// ===== FORCE SYNC (Push local data to Supabase) =====
+// ===== FORCE SYNC AND CLEAR =====
 // ============================================
 async function forceSyncData() {
     if (!supabaseEnabled || !supabaseClient) {
@@ -285,7 +292,7 @@ async function forceSyncData() {
 }
 
 // ============================================
-// ===== DEBUG FUNCTION =====
+// ===== DEBUG FUNCTION (FIXED) =====
 // ============================================
 function debugShowData() {
     const panel = document.getElementById('debugPanel');
@@ -1112,8 +1119,18 @@ document.getElementById('leaveForm').addEventListener('submit', function(e) {
     };
     
     leaves.push(leave);
-    saveData();
+    console.log('📝 Leave added to local array:', leave);
     
+    // Save to localStorage
+    try {
+        localStorage.setItem('leaves', JSON.stringify(leaves));
+        localStorage.setItem('leaveIdCounter', String(leaveIdCounter));
+        console.log('💾 Leaves saved to localStorage:', leaves.length);
+    } catch (e) {
+        console.error('❌ Error saving to localStorage:', e);
+    }
+    
+    // Sync to Supabase
     if (supabaseEnabled) {
         setTimeout(() => {
             syncToSupabase();
