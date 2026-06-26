@@ -41,6 +41,7 @@ let otpStorage = {};
 let isSyncing = false;
 let emailjsReady = false;
 let registrationData = {};
+let refreshInterval = null;
 
 // ============================================
 // ===== CHECK EMAILJS AVAILABILITY =====
@@ -129,6 +130,7 @@ async function syncToSupabase() {
         isSyncing = true;
         console.log('🔄 Syncing to Supabase...');
         
+        // Sync users
         for (const user of users) {
             const { error } = await supabaseClient
                 .from('users')
@@ -136,6 +138,7 @@ async function syncToSupabase() {
             if (error) console.error('Error syncing user:', error);
         }
         
+        // Sync leaves
         for (const leave of leaves) {
             const { error } = await supabaseClient
                 .from('leaves')
@@ -177,32 +180,16 @@ async function loadFromSupabase() {
         
         // --- MERGE USERS ---
         if (usersData && usersData.length > 0) {
-            // Create a map of existing users by ID
             const existingUsersMap = {};
             for (const u of users) {
                 existingUsersMap[u.id] = u;
             }
             
-            // Add any users from Supabase that don't exist locally
             for (const su of usersData) {
                 if (!existingUsersMap[su.id]) {
                     users.push(su);
                     dataUpdated = true;
                     console.log('📥 New user from Supabase:', su.name);
-                }
-            }
-            
-            // Also update existing users with latest data from Supabase (optional)
-            // This ensures data is consistent across devices
-            for (const su of usersData) {
-                if (existingUsersMap[su.id]) {
-                    // Update local user with Supabase data if different
-                    const localUser = existingUsersMap[su.id];
-                    if (localUser.verified !== su.verified || localUser.name !== su.name) {
-                        Object.assign(localUser, su);
-                        dataUpdated = true;
-                        console.log('🔄 Updated user from Supabase:', su.name);
-                    }
                 }
             }
         }
@@ -229,10 +216,12 @@ async function loadFromSupabase() {
             localStorage.setItem('leaves', JSON.stringify(leaves));
             console.log('✅ Data merged from Supabase - Users:', users.length, 'Leaves:', leaves.length);
             
-            // Re-render admin dashboard if admin is logged in
+            // Re-render if admin is logged in
             if (currentUserRole === 'admin') {
                 renderAdminDashboard();
                 renderAdminUsers();
+            } else if (currentUser) {
+                renderEmployeeDashboard();
             }
         } else {
             console.log('✅ No new data from Supabase');
@@ -242,6 +231,29 @@ async function loadFromSupabase() {
     } catch (e) {
         console.log('⚠️ Failed to load from Supabase:', e);
         return false;
+    }
+}
+
+// ============================================
+// ===== AUTO-REFRESH (Every 10 seconds) =====
+// ============================================
+function startAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+    }
+    
+    refreshInterval = setInterval(async () => {
+        if (supabaseEnabled && (currentUserRole === 'admin' || currentUser)) {
+            console.log('🔄 Auto-refreshing data...');
+            await loadFromSupabase();
+        }
+    }, 10000); // Refresh every 10 seconds
+}
+
+function stopAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
     }
 }
 
@@ -303,6 +315,20 @@ function verifyOTP(email, otpInput) {
 }
 
 // ============================================
+// ===== SIMPLIFIED CAPTCHA =====
+// ============================================
+function loadRecaptcha() {
+    console.log('ℹ️ reCAPTCHA disabled');
+}
+
+function verifyCaptcha(action = 'login') {
+    return new Promise((resolve) => {
+        console.log('ℹ️ CAPTCHA skipped - always passes');
+        resolve(true);
+    });
+}
+
+// ============================================
 // ===== UTILITY FUNCTIONS =====
 // ============================================
 function getEmployeeLeaves(email) {
@@ -344,48 +370,6 @@ function isValidEmail(email) {
 }
 
 // ============================================
-// ===== CAPTCHA FUNCTIONS =====
-// ============================================
-function loadRecaptcha() {
-    try {
-        const script = document.createElement('script');
-        script.src = 'https://www.google.com/recaptcha/api.js?render=6LednjQtAAAAAGF95tNXfXWJ8PC3YdilfgWrRTH6';
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-        console.log('✅ reCAPTCHA loading...');
-    } catch (e) {
-        console.warn('⚠️ reCAPTCHA error:', e);
-    }
-}
-
-function verifyCaptcha(action = 'login') {
-    return new Promise((resolve) => {
-        if (typeof grecaptcha === 'undefined') {
-            console.log('ℹ️ reCAPTCHA not ready - skipping');
-            resolve(true);
-            return;
-        }
-        try {
-            grecaptcha.ready(() => {
-                grecaptcha.execute('6LednjQtAAAAAGF95tNXfXWJ8PC3YdilfgWrRTH6', { action: action })
-                .then(token => {
-                    console.log('✅ reCAPTCHA token generated');
-                    resolve(true);
-                })
-                .catch(() => {
-                    resolve(true);
-                });
-            });
-        } catch (e) {
-            console.warn('⚠️ reCAPTCHA error:', e);
-            resolve(true);
-        }
-        setTimeout(() => resolve(true), 3000);
-    });
-}
-
-// ============================================
 // ===== PAGE NAVIGATION =====
 // ============================================
 function showPage(pageId) {
@@ -410,7 +394,7 @@ function showAdminView(viewId) {
         if (navLink) navLink.classList.add('active');
     }
     
-    // Always load fresh data from Supabase before rendering
+    // Load fresh data before rendering
     loadDataAndRefresh(viewId);
 }
 
@@ -611,6 +595,11 @@ async function approveLeave(id) {
     leave.status = 'Approved';
     saveData();
     
+    // Force sync to Supabase
+    if (supabaseEnabled) {
+        await syncToSupabase();
+    }
+    
     // Refresh admin views
     renderAdminDashboard();
     renderAdminUsers();
@@ -622,6 +611,11 @@ async function rejectLeave(id) {
     if (!leave) return;
     leave.status = 'Rejected';
     saveData();
+    
+    // Force sync to Supabase
+    if (supabaseEnabled) {
+        await syncToSupabase();
+    }
     
     // Refresh admin views
     renderAdminDashboard();
@@ -787,6 +781,9 @@ document.getElementById('adminLoginForm').addEventListener('submit', async (e) =
     // Load fresh data from Supabase before rendering
     await loadFromSupabase();
     showAdminView('adminViewDashboard');
+    
+    // Start auto-refresh for admin
+    startAutoRefresh();
 });
 
 // ============================================
@@ -834,6 +831,9 @@ document.getElementById('employeeLoginForm').addEventListener('submit', async (e
     document.getElementById('employeeLoginPage').style.display = 'none';
     document.getElementById('employeeDashboard').style.display = 'block';
     showEmployeeView('empViewDashboard');
+    
+    // Start auto-refresh for employee
+    startAutoRefresh();
 });
 
 // ============================================
@@ -951,6 +951,7 @@ document.getElementById('adminNavUsers').addEventListener('click', (e) => {
 
 document.getElementById('adminNavLogout').addEventListener('click', (e) => {
     e.preventDefault();
+    stopAutoRefresh();
     currentUserRole = null;
     document.getElementById('adminDashboard').style.display = 'none';
     document.getElementById('adminLoginForm').reset();
@@ -975,6 +976,7 @@ document.getElementById('empNavHistory').addEventListener('click', (e) => {
 
 document.getElementById('empNavLogout').addEventListener('click', (e) => {
     e.preventDefault();
+    stopAutoRefresh();
     currentUser = null;
     currentUserRole = null;
     document.getElementById('employeeDashboard').style.display = 'none';
@@ -988,7 +990,8 @@ document.getElementById('empQuickApplyBtn').addEventListener('click', () => {
 });
 
 // ============================================
-// ===== HISTORY FILTERS =====// ============================================
+// ===== HISTORY FILTERS =====
+// ============================================
 document.getElementById('historySearch').addEventListener('input', applyHistoryFilters);
 document.getElementById('historyFilter').addEventListener('change', applyHistoryFilters);
 
@@ -1043,6 +1046,13 @@ document.getElementById('leaveForm').addEventListener('submit', function(e) {
     
     leaves.push(leave);
     saveData();
+    
+    // Force sync to Supabase
+    if (supabaseEnabled) {
+        setTimeout(() => {
+            syncToSupabase();
+        }, 500);
+    }
     
     messageEl.textContent = '✅ Leave request submitted successfully! Waiting for approval.';
     messageEl.className = 'form-message success';
@@ -1122,7 +1132,6 @@ async function refreshData() {
 // ============================================
 loadData();
 loadEmployeeCredentials();
-loadRecaptcha();
 
 setTimeout(() => {
     checkEmailJS();
@@ -1137,9 +1146,11 @@ setTimeout(async () => {
     if (currentUserRole === 'admin') {
         renderAdminDashboard();
         renderAdminUsers();
+        startAutoRefresh();
     } else if (currentUser) {
         renderEmployeeDashboard();
         renderEmployeeHistory();
+        startAutoRefresh();
     }
 }, 2000);
 
@@ -1156,4 +1167,5 @@ console.log('👤 Admin:', ADMIN_CONFIG.email);
 console.log('📝 Allowed domains:', ALLOWED_DOMAINS.join(', '));
 console.log('🔗 Supabase:', supabaseEnabled ? '✅ Connected' : '❌ Not connected (using localStorage only)');
 console.log('📧 EmailJS:', typeof emailjs !== 'undefined' ? '✅ Loaded' : '❌ Not loaded');
+console.log('🔄 Auto-refresh: Every 10 seconds');
 console.log('💡 To refresh data manually, type refreshData() in console');
