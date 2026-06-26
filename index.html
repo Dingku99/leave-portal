@@ -6,6 +6,13 @@
     <title>IIITM Leave Portal</title>
     <link rel="stylesheet" href="style.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,600;14..32,700&display=swap" rel="stylesheet" />
+    
+    <!-- Load scripts with proper HTTPS and error handling -->
+    <script>
+        // Check if we're on GitHub Pages or localhost
+        const isGitHubPages = window.location.hostname.includes('github.io');
+        console.log('📍 Host:', window.location.hostname, 'GitHub Pages:', isGitHubPages);
+    </script>
 </head>
 <body>
 
@@ -452,27 +459,37 @@
     </div>
 
     <!-- ========================================== -->
-    <!-- ===== SCRIPTS - LOAD IN CORRECT ORDER ===== -->
+    <!-- ===== SCRIPTS - LOAD WITH HTTPS ========= -->
     <!-- ========================================== -->
 
-    <!-- 1. Supabase SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- 1. Supabase SDK (HTTPS) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+    </script>
 
-    <!-- 2. EmailJS Library -->
+    <!-- 2. EmailJS Library (HTTPS) -->
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js">
     </script>
 
-    <!-- 3. Initialize EmailJS with your public key -->
+    <!-- 3. Initialize EmailJS -->
     <script>
-        (function() {
-            emailjs.init({
-                publicKey: "LVSbb6UwpBu6P5EI3",
-            });
-            console.log('✅ EmailJS initialized with public key');
-        })();
+        // Wait for emailjs to load
+        setTimeout(function() {
+            if (typeof emailjs !== 'undefined') {
+                try {
+                    emailjs.init({
+                        publicKey: "LVSbb6UwpBu6P5EI3",
+                    });
+                    console.log('✅ EmailJS initialized with public key');
+                } catch (e) {
+                    console.warn('⚠️ EmailJS init error:', e);
+                }
+            } else {
+                console.warn('⚠️ EmailJS not loaded');
+            }
+        }, 1000);
     </script>
 
-    <!-- 4. Your Main Script -->
+    <!-- 4. Your Main Script (Loads LAST) -->
     <script src="script.js"></script>
 
 </body>
